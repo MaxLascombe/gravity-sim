@@ -1,5 +1,6 @@
-var FPS = 30;
+var FPS = 300;
 var G = 50; // universal gravitional constant
+var collapseOnCollision = true;
 
 class Obj {
 
@@ -10,16 +11,20 @@ class Obj {
     this.m = newM;
     this.vx = newVx;
     this.vy = newVy;
+    this.ax = 0;
+    this.ay = 0;
 
     var newEl = "<div id='" + newID + "' class='obj'></div>";
     $("body").append(newEl);
   }
 
-  width () {
-    return Math.sqrt(this.m);
-  }
+  width () { return Math.sqrt(this.m); }
+  g (other_m, r) { return G * this.m * other_m / (r*r); }
+  r (obj) { return Math.sqrt( Math.pow(this.x-obj.x, 2) + Math.pow(this.y-obj.y, 2) ); }
 
   updateXY () {
+    this.vx += this.ax;
+    this.vy += this.ay;
     this.x += this.vx;
     this.y += this.vy;
     var rad = this.width()/2;
@@ -27,21 +32,19 @@ class Obj {
       "top": this.y - rad + "px",
       "left": this.x - rad + "px",
       "width": 2*rad + "px",
-      "height": 2*rad + "px"
+      "height": 2*rad + "px",
+      "background-color": this.color()
     });
   }
 
-  // PROBLEM IN THIS FUNCTION
-  updateV (otherObjs) {
+  color () {
+    var speed = Math.sqrt( this.vx*this.vx + this.vy*this.vy );
+    var atan = Math.atan( speed / 3 );
+    var gb = 255 * (1 - atan / (Math.PI / 2));
+    return "rgb(255,"+gb+","+gb+")";
+  }
 
-    // if (!isNaN(this.x)) {
-    //   console.log("called" + this.id)
-    //   console.log(this.x);
-    //   console.log(this.y);
-    //   console.log(this.m);
-    //   console.log(this.vx);
-    //   console.log(this.vy);
-    // }
+  updateA (otherObjs) {
 
     // calculate force
     var Fx = 0;
@@ -63,25 +66,21 @@ class Obj {
     }
 
     // calculate new velocity
-    this.vx += Fx / this.m;
-    this.vy += Fy / this.m;
-  }
-
-  g (other_m, r) {
-    return G * this.m * other_m / (r*r);
-  }
-
-  r (obj) {
-    return Math.sqrt( Math.pow(this.x-obj.x, 2) + Math.pow(this.y-obj.y, 2) );
+    this.ax = Fx / this.m;
+    this.ay = Fy / this.m;
   }
 
   collidesWith (obj) {
-    return this.r(obj) < this.width()/2+obj.width()/2;
+    var nextX = this.x + this.vx + this.ax;
+    var nextY = this.y + this.vy + this.ay;
+    var oNextX = obj.x + obj.vx + obj.ax;
+    var oNextY = obj.y + obj.vy + obj.ay;
+    return Math.sqrt( Math.pow(nextX-oNextX, 2) + Math.pow(nextY-oNextY, 2) ) < this.width()/2+obj.width()/2;
   }
 
   absorb (obj) {
-    this.x = (this.x + obj.x) / 2;
-    this.y = (this.y + obj.y) / 2;
+    this.x = (this.m > obj.m) ? this.x : obj.x;
+    this.y = (this.m > obj.m) ? this.y : obj.y;
     this.vx = (this.vx * this.m + obj.vx * obj.m) / (this.m + obj.m);
     this.vy = (this.vy * this.m + obj.vy * obj.m) / (this.m + obj.m);
     this.m += obj.m;
@@ -91,18 +90,12 @@ class Obj {
 
 var objs = [];
 
-$(document).click(function(e) {
-  objs.push(new Obj("obj"+objs.length, e.pageX, e.pageY));
-})
-
-$(document).ready(function() {
-  for (var i = 0; i < 100; i++) {
-    objs.push(new Obj("obj"+objs.length, Math.random()*window.innerWidth, Math.random()*window.innerHeight, Math.random()*50, Math.random()*0.4-0.2, Math.random()*0.4-0.2));
-  }
-  setInterval(function () {updateUniverse();}, 1000/FPS);
-})
-
 function updateUniverse () {
+
+  // update velocities
+  for (var i = 0; i < objs.length; i++) {
+    objs[i].updateA(objs);
+  }
 
   // check for collisions
   for (var i = 0; i < objs.length; i++) {
@@ -110,16 +103,22 @@ function updateUniverse () {
       var oi = objs[i];
       var oj = objs[j];
       if (oi.collidesWith(oj)) {
-        oi.absorb(oj);
-        $(oj.id).remove();
-        objs.splice(j,1);
+        if (collapseOnCollision) {
+          oi.absorb(oj);
+          $(oj.id).remove();
+          objs.splice(j,1);
+        } else {
+          oi.ax = 0;
+          oi.ay = 0;
+          oj.ax = 0;
+          oj.ay = 0;
+          oi.vx = -oi.vx;
+          oi.vy = -oi.vy;
+          oj.vx = -oj.vx;
+          oj.vy = -oj.vy;
+        }
       }
     }
-  }
-
-  // update velocities
-  for (var i = 0; i < objs.length; i++) {
-    objs[i].updateV(objs);
   }
 
   // and displacements
@@ -132,6 +131,18 @@ function updateUniverse () {
   isn't affected and it works with low FPS
   */
 }
+
+$(document).click(function(e) {
+  objs.push(new Obj("obj"+objs.length, e.pageX, e.pageY));
+})
+
+$(document).ready(function() {
+  for (var i = 0; i < 50; i++) {
+    var max_v = 0.5;
+    objs.push(new Obj("obj"+objs.length, Math.random()*window.innerWidth, Math.random()*window.innerHeight, Math.random()*200, Math.random()*max_v-max_v/2, Math.random()*max_v-max_v/2));
+  }
+  setInterval(function () {updateUniverse();}, 1000/FPS);
+})
 
 $(document).keypress(function(e) {
   if (e.which == 104)
