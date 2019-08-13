@@ -1,0 +1,14 @@
+html, body {
+  margin: 0;
+}
+
+body {
+  position: relative;
+  background-color: #03021a;
+}
+
+.obj {
+  position: absolute;
+  border-radius: 50%;
+  background-color: white;
+}
